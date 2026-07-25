@@ -28,6 +28,9 @@ test("renders the complete Russian product page and social metadata", async () =
   assert.match(html, /<html lang="ru">/);
   assert.match(html, /Пост готов/);
   assert.match(html, /Создать публикацию/);
+  assert.match(html, /Создать готовую картинку/);
+  assert.match(html, /Белая плашка/);
+  assert.match(html, /Стикеры/);
   assert.match(html, /Фото остаются у вас/);
   assert.match(html, /https:\/\/tiho\.example\/og\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);

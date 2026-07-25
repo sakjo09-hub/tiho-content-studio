@@ -5,11 +5,12 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 type Format = "post" | "stories" | "reel";
 type Tone = "warm" | "expert" | "sales";
 type Goal = "trust" | "booking" | "education";
+type VisualStyle = "paper" | "stickers" | "overlay";
 
 const formats: { id: Format; icon: string; title: string; hint: string }[] = [
-  { id: "post", icon: "✦", title: "Пост", hint: "Текст + призыв" },
-  { id: "stories", icon: "◫", title: "Сторис", hint: "Серия из 4 экранов" },
-  { id: "reel", icon: "▶", title: "Рилс", hint: "Сценарий на 20 сек." },
+  { id: "post", icon: "✦", title: "Пост", hint: "Квадрат 1080 × 1080" },
+  { id: "stories", icon: "◫", title: "Сторис", hint: "Вертикально 1080 × 1920" },
+  { id: "reel", icon: "▶", title: "Рилс", hint: "Обложка 1080 × 1920" },
 ];
 
 const quickIdeas = [
@@ -45,10 +46,10 @@ function buildContent(format: Format, tone: Tone, goal: Goal, idea: string) {
   }
   if (format === "stories") {
     return {
-      title: "4 экрана сторис",
-      eyebrow: "Коротко и живо",
-      body: `1 — ЗАЦЕПКА\n${hooks[tone]}\n\n2 — ТЕМА\n${topic}\nПокажите фото кабинета, процесса или спокойный лайф-кадр.\n\n3 — ПОЛЬЗА\nМягкая работа с телом помогает расслабиться и лучше замечать собственные ощущения. Результат всегда индивидуален.\n\n4 — ДЕЙСТВИЕ\n${goalLine[goal]}`,
-      tags: "Стикер: «Записаться» · Реакция: 🤍",
+      title: "Готовая сторис",
+      eyebrow: "Картинка уже собрана",
+      body: `${hooks[tone]}\n\nТема: ${topic}\n\n${goalLine[goal]}`,
+      tags: "Можно скачать картинку и сразу опубликовать в сторис",
     };
   }
   return {
@@ -59,10 +60,176 @@ function buildContent(format: Format, tone: Tone, goal: Goal, idea: string) {
   };
 }
 
+function buildVisualCopy(tone: Tone, goal: Goal, idea: string) {
+  const topic = safeTopic(idea);
+  if (topic) {
+    if (goal === "booking") return `${topic}\n\nЗапись открыта — напишите мне, чтобы выбрать удобное время.`;
+    if (goal === "trust") return `${topic}\n\nБережно, индивидуально и с вниманием к вашим ощущениям.`;
+    return `${topic}\n\nСохраняйте, чтобы не потерять.`;
+  }
+  if (tone === "sales") return "Подарите себе час,\nпосле которого легче\nдышать и двигаться.\n\nЗапись открыта ✦";
+  if (tone === "expert") return "Массаж — не волшебство,\nа бережная работа\nс вашим телом\nи самочувствием.";
+  return "Иногда телу нужно\nне «потерпеть ещё»,\nа немного заботы.\n\nВы это заслужили 🤍";
+}
+
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  const lines: string[] = [];
+  text.split("\n").forEach((paragraph) => {
+    if (!paragraph) {
+      lines.push("");
+      return;
+    }
+    let line = "";
+    paragraph.split(" ").forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (ctx.measureText(candidate).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    });
+    if (line) lines.push(line);
+  });
+  return lines.slice(0, 9);
+}
+
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+async function renderCreative(
+  canvas: HTMLCanvasElement,
+  format: Format,
+  style: VisualStyle,
+  photoUrl: string,
+  copy: string,
+) {
+  const width = 1080;
+  const height = format === "post" ? 1080 : 1920;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const paintBackground = (image?: HTMLImageElement) => {
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#d7dfd8");
+    gradient.addColorStop(.52, "#617d6d");
+    gradient.addColorStop(1, "#b77c61");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    if (image) {
+      const scale = Math.max(width / image.width, height / image.height);
+      const w = image.width * scale;
+      const h = image.height * scale;
+      ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,.11)";
+      ctx.beginPath();
+      ctx.arc(width * .78, height * .19, width * .3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(width * .08, height * .77, width * .42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = "700 28px Arial";
+    ctx.letterSpacing = "4px";
+    ctx.fillStyle = style === "paper" || style === "stickers" ? "rgba(255,255,255,.92)" : "#fff";
+    ctx.fillText("ТИХО • КОНТЕНТ-СТУДИЯ", 62, 72);
+    ctx.letterSpacing = "0px";
+
+    const baseFont = format === "post" ? 58 : 66;
+    ctx.font = `500 ${baseFont}px Arial`;
+    const maxTextWidth = style === "overlay" ? width - 150 : width - 210;
+    const lines = wrapCanvasText(ctx, copy, maxTextWidth);
+    const lineHeight = baseFont * 1.22;
+
+    if (style === "paper") {
+      const contentLines = lines.filter((line, index) => line || (index > 0 && index < lines.length - 1));
+      const boxHeight = contentLines.length * lineHeight + 112;
+      const boxY = format === "post" ? (height - boxHeight) / 2 : height * .57 - boxHeight / 2;
+      ctx.fillStyle = "rgba(255,255,255,.94)";
+      ctx.fillRect(70, boxY, width - 140, boxHeight);
+      ctx.fillStyle = "#17211d";
+      ctx.textAlign = "center";
+      contentLines.forEach((line, index) => {
+        ctx.fillText(line || " ", width / 2, boxY + 62 + lineHeight * index);
+      });
+    } else if (style === "stickers") {
+      const visibleLines = lines.filter(Boolean);
+      const groupHeight = visibleLines.length * (lineHeight + 12);
+      let y = Math.min(height - groupHeight - 90, height * .66);
+      ctx.textAlign = "center";
+      visibleLines.forEach((line) => {
+        const lineWidth = Math.min(ctx.measureText(line).width + 92, width - 70);
+        roundedRect(ctx, (width - lineWidth) / 2, y, lineWidth, lineHeight + 18, 44);
+        ctx.fillStyle = "rgba(255,255,255,.96)";
+        ctx.fill();
+        ctx.fillStyle = "#111816";
+        ctx.fillText(line, width / 2, y + (lineHeight + 18) / 2);
+        y += lineHeight + 12;
+      });
+    } else {
+      const shade = ctx.createLinearGradient(0, height * .34, 0, height);
+      shade.addColorStop(0, "rgba(15,30,24,0)");
+      shade.addColorStop(.58, "rgba(15,30,24,.64)");
+      shade.addColorStop(1, "rgba(15,30,24,.9)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = "#fffaf2";
+      ctx.textAlign = "left";
+      const startY = height - lines.length * lineHeight - 120;
+      lines.forEach((line, index) => {
+        ctx.fillText(line || " ", 72, startY + lineHeight * index);
+      });
+    }
+  };
+
+  if (!photoUrl) {
+    paintBackground();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      paintBackground(image);
+      resolve();
+    };
+    image.onerror = () => {
+      paintBackground();
+      resolve();
+    };
+    image.src = photoUrl;
+  });
+}
+
 export default function Home() {
   const [format, setFormat] = useState<Format>("post");
   const [tone, setTone] = useState<Tone>("warm");
   const [goal, setGoal] = useState<Goal>("booking");
+  const [visualStyle, setVisualStyle] = useState<VisualStyle>("paper");
   const [idea, setIdea] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoName, setPhotoName] = useState("");
@@ -70,10 +237,22 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
   }, [photoUrl]);
+
+  useEffect(() => {
+    if (!result || !canvasRef.current) return;
+    void renderCreative(
+      canvasRef.current,
+      format,
+      visualStyle,
+      photoUrl,
+      buildVisualCopy(tone, goal, idea),
+    );
+  }, [result, format, visualStyle, photoUrl, tone, goal, idea]);
 
   const selectedFormat = useMemo(
     () => formats.find((item) => item.id === format)!,
@@ -123,59 +302,12 @@ export default function Home() {
   };
 
   const downloadCard = () => {
-    if (!result) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const draw = (image?: HTMLImageElement) => {
-      const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
-      gradient.addColorStop(0, "#1f392f");
-      gradient.addColorStop(1, "#8b6956");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 1080, 1920);
-      if (image) {
-        const scale = Math.max(1080 / image.width, 1920 / image.height);
-        const w = image.width * scale;
-        const h = image.height * scale;
-        ctx.globalAlpha = 0.46;
-        ctx.drawImage(image, (1080 - w) / 2, (1920 - h) / 2, w, h);
-        ctx.globalAlpha = 1;
-      }
-      ctx.fillStyle = "rgba(19, 31, 27, .58)";
-      ctx.fillRect(0, 0, 1080, 1920);
-      ctx.fillStyle = "#f6f0e8";
-      ctx.font = "700 44px Arial";
-      ctx.fillText("ТИХО • КОНТЕНТ-СТУДИЯ", 72, 120);
-      ctx.font = "700 78px Georgia";
-      const words = (safeTopic(idea) || "Забота о теле начинается с внимания к себе").split(" ");
-      const lines: string[] = [];
-      let line = "";
-      words.forEach((word) => {
-        const test = `${line}${word} `;
-        if (ctx.measureText(test).width > 900 && line) {
-          lines.push(line.trim());
-          line = `${word} `;
-        } else line = test;
-      });
-      lines.push(line.trim());
-      lines.slice(0, 5).forEach((text, index) => ctx.fillText(text, 72, 1180 + index * 92));
-      ctx.font = "400 38px Arial";
-      ctx.fillStyle = "#e7d8c9";
-      ctx.fillText("Бережно. Индивидуально. В вашем темпе.", 72, 1750);
-      const link = document.createElement("a");
-      link.download = "story-tiho.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      flash("Карточка скачана");
-    };
-    if (photoUrl) {
-      const image = new Image();
-      image.onload = () => draw(image);
-      image.onerror = () => draw();
-      image.src = photoUrl;
-    } else draw();
+    if (!result || !canvasRef.current) return;
+    const link = document.createElement("a");
+    link.download = `tiho-${format}.png`;
+    link.href = canvasRef.current.toDataURL("image/png");
+    link.click();
+    flash("Готовая картинка скачана");
   };
 
   return (
@@ -192,7 +324,7 @@ export default function Home() {
         <div className="hero-copy">
           <p className="kicker">Контент-студия для массажиста</p>
           <h1>Пост готов.<br/><em>Можно выдохнуть.</em></h1>
-          <p className="hero-text">Добавьте фото или мысль — получите готовый текст, сторис или сценарий рилс без маркетолога и долгих раздумий.</p>
+          <p className="hero-text">Добавьте фото или мысль — получите готовую картинку для поста, сторис или обложки рилс без маркетолога и долгих раздумий.</p>
           <div className="hero-proof">
             <span>≈ 1 минута</span><span>Без регистрации</span><span>Бережные формулировки</span>
           </div>
@@ -260,6 +392,26 @@ export default function Home() {
               <div className="quick-ideas" aria-label="Быстрые идеи">
                 {quickIdeas.map((item) => <button type="button" key={item} onClick={() => setIdea(item)}>+ {item}</button>)}
               </div>
+              <div className="visual-picker">
+                <strong>Как разместить текст на фото</strong>
+                <div className="visual-options">
+                  {([
+                    ["paper", "Белая плашка", "▭"],
+                    ["stickers", "Стикеры", "▰"],
+                    ["overlay", "На фото", "◩"],
+                  ] as [VisualStyle, string, string][]).map(([id, label, icon]) => (
+                    <button
+                      type="button"
+                      key={id}
+                      className={visualStyle === id ? "active" : ""}
+                      onClick={() => setVisualStyle(id)}
+                      aria-pressed={visualStyle === id}
+                    >
+                      <span aria-hidden="true">{icon}</span>{label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </fieldset>
 
             <div className="options-row">
@@ -282,7 +434,7 @@ export default function Home() {
             </div>
 
             <button className="generate-button" type="button" onClick={generate} disabled={busy}>
-              <span>{busy ? "Собираю публикацию…" : `Создать ${selectedFormat.title.toLowerCase()}`}</span>
+              <span>{busy ? "Собираю картинку…" : "Создать готовую картинку"}</span>
               <span aria-hidden="true">{busy ? "◌" : "→"}</span>
             </button>
             <p className="safety-note">Тексты не содержат диагнозов и обещаний лечения. Перед публикацией проверьте факты и личные данные на фото.</p>
@@ -315,16 +467,22 @@ export default function Home() {
       {result && (
         <section className="result-section" ref={resultRef} aria-live="polite">
           <div className="result-head">
-            <div><p className="kicker">{result.eyebrow}</p><h2>{result.title}</h2></div>
+            <div><p className="kicker">Готово к публикации</p><h2>Ваша картинка</h2></div>
             <span className="ready-badge">● Готово</span>
           </div>
-          <div className="result-card">
-            <pre>{result.body}</pre>
-            <p className="tags">{result.tags}</p>
-            <div className="result-actions">
-              <button type="button" className="copy-button" onClick={copy}>Скопировать текст</button>
-              <button type="button" className="download-button" onClick={downloadCard}>Скачать сторис-карточку</button>
-              <button type="button" className="again-button" onClick={generate}>Другой вариант</button>
+          <div className="creative-result">
+            <div className={`canvas-frame ${format === "post" ? "square" : "vertical"}`}>
+              <canvas ref={canvasRef} aria-label={`Готовое изображение: ${selectedFormat.title}`} />
+            </div>
+            <div className="result-card">
+              <p className="result-label">Дополнительная подпись</p>
+              <pre>{result.body}</pre>
+              <p className="tags">{result.tags}</p>
+              <div className="result-actions">
+                <button type="button" className="download-button" onClick={downloadCard}>Скачать готовую картинку</button>
+                <button type="button" className="copy-button" onClick={copy}>Скопировать подпись</button>
+                <button type="button" className="again-button" onClick={generate}>Другой вариант</button>
+              </div>
             </div>
           </div>
         </section>

@@ -83,6 +83,12 @@ textarea::placeholder { color: #969c96; }
 .quick-ideas { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .quick-ideas button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); background: white; font-size: 9px; cursor: pointer; }
 .quick-ideas button:hover { color: var(--forest); border-color: var(--forest); }
+.visual-picker { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: #faf8f3; }
+.visual-picker > strong { display: block; margin-bottom: 11px; font-size: 11px; }
+.visual-options { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.visual-options button { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 12px; background: white; font-size: 10px; font-weight: 700; cursor: pointer; }
+.visual-options button span { font-size: 18px; }
+.visual-options button.active { color: white; border-color: var(--forest); background: var(--forest); }
 .options-row { display: grid; grid-template-columns: 1fr .7fr; gap: 20px; }
 .segmented { display: grid; grid-template-columns: repeat(3,1fr); padding: 4px; border-radius: 14px; background: #efeee9; }
 .segmented button { min-height: 45px; border: 0; border-radius: 11px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
@@ -113,10 +119,16 @@ select { width: 100%; height: 53px; padding: 0 14px; border: 1px solid var(--lin
 .preview-caption { min-height: 62px; margin: 0; padding: 3px 14px 15px; font-size: 8px; line-height: 1.45; }
 .preview-hint { margin: 17px 0 0; text-align: center; color: var(--muted); font-size: 9px; }
 
-.result-section { padding: 86px max(24px, calc((100% - 940px)/2)); background: #e9efe9; scroll-margin-top: 20px; }
+.result-section { padding: 86px max(24px, calc((100% - 1180px)/2)); background: #e9efe9; scroll-margin-top: 20px; }
 .ready-badge { color: #47755a; background: white; }
+.creative-result { display: grid; grid-template-columns: minmax(300px,.9fr) minmax(0,1.1fr); gap: 34px; align-items: start; }
+.canvas-frame { display: grid; place-items: center; overflow: hidden; border: 10px solid white; border-radius: 28px; background: #dfe6df; box-shadow: var(--shadow); }
+.canvas-frame.square { aspect-ratio: 1; }
+.canvas-frame.vertical { width: min(100%, 470px); aspect-ratio: 9/16; justify-self: center; }
+.canvas-frame canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
 .result-card { padding: clamp(24px,5vw,52px); border: 1px solid rgba(39,76,61,.12); border-radius: 26px; background: var(--paper); box-shadow: var(--shadow); }
-.result-card pre { margin: 0; white-space: pre-wrap; color: #33423b; font-family: Inter,"Segoe UI",sans-serif; font-size: 15px; line-height: 1.75; }
+.result-label { margin: 0 0 14px; color: var(--clay); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.result-card pre { max-height: 430px; overflow-y: auto; margin: 0; white-space: pre-wrap; color: #33423b; font-family: Inter,"Segoe UI",sans-serif; font-size: 14px; line-height: 1.65; }
 .tags { margin: 28px 0 0; padding-top: 24px; border-top: 1px solid var(--line); color: var(--forest); font-size: 13px; font-weight: 700; }
 .result-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 28px; }
 .result-actions button { min-height: 48px; padding: 0 18px; border-radius: 13px; font-size: 11px; font-weight: 800; cursor: pointer; }
@@ -163,6 +175,9 @@ footer > span { color: rgba(255,255,255,.38); font-size: 9px; }
   .quick-ideas { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 7px; }
   .quick-ideas button { white-space: nowrap; }
   .result-actions { display: grid; }
+  .creative-result { grid-template-columns: 1fr; }
+  .canvas-frame { width: min(100%, 470px); justify-self: center; }
+  .visual-options { grid-template-columns: 1fr; }
   .how { padding-block: 82px; }
   .how-grid { grid-template-columns: 1fr; margin-top: 46px; }
   .how article { padding-bottom: 20px; }
