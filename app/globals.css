@@ -80,6 +80,12 @@ textarea { width: 100%; min-height: 150px; resize: vertical; padding: 16px 18px 
 textarea::placeholder { color: #969c96; }
 .char-count { position: absolute; right: 14px; bottom: 12px; color: #9a9f99; font-size: 9px; }
 .file-note { margin: 9px 0 0; color: var(--forest); font-size: 10px; }
+.photo-consent { margin-top: 12px; padding: 12px 14px; border: 1px solid rgba(39,69,55,.16); border-radius: 14px; background: rgba(255,255,255,.58); }
+.photo-consent .file-note { margin: 0 0 9px; }
+.photo-consent label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.photo-consent input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--forest); }
+.photo-consent span { display: grid; gap: 3px; }
+.photo-consent small { color: var(--muted); line-height: 1.4; }
 .quick-ideas { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .quick-ideas button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); background: white; font-size: 9px; cursor: pointer; }
 .quick-ideas button:hover { color: var(--forest); border-color: var(--forest); }

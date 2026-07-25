@@ -6,6 +6,14 @@ type Format = "post" | "stories" | "reel";
 type Tone = "warm" | "expert" | "sales";
 type Goal = "trust" | "booking" | "education";
 type VisualStyle = "paper" | "stickers" | "overlay";
+type StoryPlan = {
+  headline: string;
+  body: string;
+  caption: string;
+  layout: "editorial" | "stickers" | "infographic" | "before-after";
+  palette: "sand" | "sage" | "charcoal" | "rose";
+  photoRole: "background" | "hero" | "split" | "none";
+};
 
 const formats: { id: Format; icon: string; title: string; hint: string }[] = [
   { id: "post", icon: "✦", title: "Пост", hint: "Квадрат 1080 × 1080" },
@@ -122,6 +130,7 @@ async function renderCreative(
   style: VisualStyle,
   photoUrl: string,
   copy: string,
+  plan?: StoryPlan | null,
 ) {
   const width = 1080;
   const height = format === "post" ? 1080 : 1920;
@@ -131,10 +140,17 @@ async function renderCreative(
   if (!ctx) return;
 
   const paintBackground = (image?: HTMLImageElement) => {
+    const palettes = {
+      sand: ["#ead7c1", "#b58a70", "#684c42"],
+      sage: ["#d7dfd8", "#617d6d", "#304b3f"],
+      charcoal: ["#282828", "#151515", "#000000"],
+      rose: ["#ecd7d4", "#b9827b", "#744d51"],
+    };
+    const colors = palettes[plan?.palette || "sage"];
     const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#d7dfd8");
-    gradient.addColorStop(.52, "#617d6d");
-    gradient.addColorStop(1, "#b77c61");
+    gradient.addColorStop(0, colors[0]);
+    gradient.addColorStop(.52, colors[1]);
+    gradient.addColorStop(1, colors[2]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
     if (image) {
@@ -156,17 +172,22 @@ async function renderCreative(
     ctx.textBaseline = "middle";
     ctx.font = "700 28px Arial";
     ctx.letterSpacing = "4px";
-    ctx.fillStyle = style === "paper" || style === "stickers" ? "rgba(255,255,255,.92)" : "#fff";
+    const resolvedStyle: VisualStyle = plan?.layout === "stickers"
+      ? "stickers"
+      : plan?.layout === "infographic"
+        ? "overlay"
+        : style;
+    ctx.fillStyle = resolvedStyle === "paper" || resolvedStyle === "stickers" ? "rgba(255,255,255,.92)" : "#fff";
     ctx.fillText("ТИХО • КОНТЕНТ-СТУДИЯ", 62, 72);
     ctx.letterSpacing = "0px";
 
     const baseFont = format === "post" ? 58 : 66;
     ctx.font = `500 ${baseFont}px Arial`;
-    const maxTextWidth = style === "overlay" ? width - 150 : width - 210;
+    const maxTextWidth = resolvedStyle === "overlay" ? width - 150 : width - 210;
     const lines = wrapCanvasText(ctx, copy, maxTextWidth);
     const lineHeight = baseFont * 1.22;
 
-    if (style === "paper") {
+    if (resolvedStyle === "paper") {
       const contentLines = lines.filter((line, index) => line || (index > 0 && index < lines.length - 1));
       const boxHeight = contentLines.length * lineHeight + 112;
       const boxY = format === "post" ? (height - boxHeight) / 2 : height * .57 - boxHeight / 2;
@@ -177,7 +198,7 @@ async function renderCreative(
       contentLines.forEach((line, index) => {
         ctx.fillText(line || " ", width / 2, boxY + 62 + lineHeight * index);
       });
-    } else if (style === "stickers") {
+    } else if (resolvedStyle === "stickers") {
       const visibleLines = lines.filter(Boolean);
       const groupHeight = visibleLines.length * (lineHeight + 12);
       let y = Math.min(height - groupHeight - 90, height * .66);
@@ -225,6 +246,24 @@ async function renderCreative(
   });
 }
 
+async function photoForAnalysis(photoUrl: string) {
+  if (!photoUrl) return null;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const item = new Image();
+    item.onload = () => resolve(item);
+    item.onerror = reject;
+    item.src = photoUrl;
+  });
+  const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", .76);
+}
+
 export default function Home() {
   const [format, setFormat] = useState<Format>("post");
   const [tone, setTone] = useState<Tone>("warm");
@@ -234,6 +273,9 @@ export default function Home() {
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoName, setPhotoName] = useState("");
   const [result, setResult] = useState<ReturnType<typeof buildContent> | null>(null);
+  const [storyPlan, setStoryPlan] = useState<StoryPlan | null>(null);
+  const [generationMode, setGenerationMode] = useState<"ai" | "demo" | "fallback">("demo");
+  const [analyzePhoto, setAnalyzePhoto] = useState(false);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -250,9 +292,10 @@ export default function Home() {
       format,
       visualStyle,
       photoUrl,
-      buildVisualCopy(tone, goal, idea),
+      storyPlan ? `${storyPlan.headline}\n\n${storyPlan.body}` : buildVisualCopy(tone, goal, idea),
+      storyPlan,
     );
-  }, [result, format, visualStyle, photoUrl, tone, goal, idea]);
+  }, [result, format, visualStyle, photoUrl, tone, goal, idea, storyPlan]);
 
   const selectedFormat = useMemo(
     () => formats.find((item) => item.id === format)!,
@@ -282,13 +325,40 @@ export default function Home() {
     setPhotoName(file.name.slice(0, 80));
   };
 
-  const generate = () => {
+  const generate = async () => {
     setBusy(true);
-    window.setTimeout(() => {
+    try {
+      const photo = analyzePhoto && photoUrl ? await photoForAnalysis(photoUrl) : null;
+      const response = await fetch("/api/generate-story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          tone,
+          goal,
+          idea,
+          ...(photo ? { photo: { dataUrl: photo, name: photoName || "story-photo.jpg" } } : {}),
+        }),
+      });
+      const data = await response.json() as { plan?: StoryPlan; mode?: "ai" | "demo" | "fallback"; error?: string };
+      if (!response.ok || !data.plan) throw new Error(data.error || "Не удалось создать сторис");
+      setStoryPlan(data.plan);
+      setGenerationMode(data.mode || "fallback");
+      setResult({
+        title: "Цельная сторис",
+        eyebrow: data.mode === "ai" ? "Создано ИИ-режиссёром" : "Демонстрационный режим",
+        body: data.plan.caption,
+        tags: "Проверьте факты и согласие клиента перед публикацией",
+      });
+    } catch {
+      setStoryPlan(null);
+      setGenerationMode("fallback");
       setResult(buildContent(format, tone, goal, idea));
+      flash("ИИ временно недоступен — создан безопасный резервный вариант");
+    } finally {
       setBusy(false);
       window.setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
-    }, 520);
+    }
   };
 
   const copy = async () => {
@@ -388,12 +458,24 @@ export default function Home() {
                   <span className="char-count">{idea.length}/240</span>
                 </div>
               </div>
-              {photoName && <p className="file-note">Фото выбрано: {photoName}. Оно не загружается на сервер.</p>}
+              {photoName && (
+                <div className="photo-consent">
+                  <p className="file-note">Фото выбрано: {photoName}.</p>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={analyzePhoto}
+                      onChange={(event) => setAnalyzePhoto(event.target.checked)}
+                    />
+                    <span><strong>Разрешить ИИ проанализировать фото</strong><small>Уменьшенная копия будет временно отправлена GigaChat и удалена после создания концепции.</small></span>
+                  </label>
+                </div>
+              )}
               <div className="quick-ideas" aria-label="Быстрые идеи">
                 {quickIdeas.map((item) => <button type="button" key={item} onClick={() => setIdea(item)}>+ {item}</button>)}
               </div>
               <div className="visual-picker">
-                <strong>Как разместить текст на фото</strong>
+                <strong>Предпочтительный стиль — ИИ сможет изменить его под идею</strong>
                 <div className="visual-options">
                   {([
                     ["paper", "Белая плашка", "▭"],
@@ -434,7 +516,7 @@ export default function Home() {
             </div>
 
             <button className="generate-button" type="button" onClick={generate} disabled={busy}>
-              <span>{busy ? "Собираю картинку…" : "Создать готовую картинку"}</span>
+              <span>{busy ? "ИИ продумывает сторис…" : "Создать сторис целиком"}</span>
               <span aria-hidden="true">{busy ? "◌" : "→"}</span>
             </button>
             <p className="safety-note">Тексты не содержат диагнозов и обещаний лечения. Перед публикацией проверьте факты и личные данные на фото.</p>
@@ -457,7 +539,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="social-actions"><span>♡　◇　⌁</span><span>▢</span></div>
-              <p className="preview-caption"><strong>massage_marina</strong> {result ? result.body.split("\n")[0] : "Новый пост появится здесь после создания…"}</p>
+              <p className="preview-caption"><strong>massage_marina</strong> {storyPlan?.headline || (result ? result.body.split("\n")[0] : "Новая сторис появится здесь после создания…")}</p>
             </div>
             <p className="preview-hint">Так публикация будет выглядеть в ленте</p>
           </aside>
@@ -468,7 +550,7 @@ export default function Home() {
         <section className="result-section" ref={resultRef} aria-live="polite">
           <div className="result-head">
             <div><p className="kicker">Готово к публикации</p><h2>Ваша картинка</h2></div>
-            <span className="ready-badge">● Готово</span>
+            <span className="ready-badge">● {generationMode === "ai" ? "Создано ИИ" : "Демо-режим"}</span>
           </div>
           <div className="creative-result">
             <div className={`canvas-frame ${format === "post" ? "square" : "vertical"}`}>
