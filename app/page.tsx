@@ -14,6 +14,13 @@ type StoryPlan = {
   palette: "sand" | "sage" | "charcoal" | "rose";
   photoRole: "background" | "hero" | "split" | "none";
 };
+type Draft = {
+  format: Format;
+  tone: Tone;
+  goal: Goal;
+  visualStyle: VisualStyle;
+  idea: string;
+};
 
 const formats: { id: Format; icon: string; title: string; hint: string }[] = [
   { id: "post", icon: "✦", title: "Пост", hint: "Квадрат 1080 × 1080" },
@@ -26,6 +33,35 @@ const quickIdeas = [
   "Результат процедуры: лёгкость в спине",
   "3 привычки для расслабленной шеи",
   "Знакомство со мной и моим кабинетом",
+];
+
+const weeklyIdeas: Array<{
+  day: string;
+  short: string;
+  idea: string;
+  format: Format;
+  tone: Tone;
+  goal: Goal;
+}> = [
+  { day: "Понедельник", short: "Пн", idea: "Знакомство со мной: почему я выбрала массаж", format: "post", tone: "warm", goal: "trust" },
+  { day: "Вторник", short: "Вт", idea: "Миф о массаже, в который пора перестать верить", format: "stories", tone: "expert", goal: "education" },
+  { day: "Среда", short: "Ср", idea: "Свободные окна на этой неделе", format: "stories", tone: "warm", goal: "booking" },
+  { day: "Четверг", short: "Чт", idea: "Как проходит первый сеанс массажа", format: "post", tone: "expert", goal: "trust" },
+  { day: "Пятница", short: "Пт", idea: "Простая привычка для расслабленной шеи вечером", format: "reel", tone: "expert", goal: "education" },
+  { day: "Суббота", short: "Сб", idea: "Тихая атмосфера моего кабинета", format: "stories", tone: "warm", goal: "trust" },
+  { day: "Воскресенье", short: "Вс", idea: "Мягкое напоминание позаботиться о себе и записаться", format: "post", tone: "sales", goal: "booking" },
+];
+
+const formatAction: Record<Format, { button: string; result: string; ready: string }> = {
+  post: { button: "Создать пост с картинкой", result: "Готовый пост", ready: "Пост готов" },
+  stories: { button: "Создать сторис целиком", result: "Готовая сторис", ready: "Сторис готова" },
+  reel: { button: "Создать обложку и сценарий", result: "Обложка и сценарий", ready: "Рилс готов" },
+};
+
+const busyMessages = [
+  "ИИ ищет сильную идею…",
+  "Собирает композицию и текст…",
+  "Проверяет формулировки…",
 ];
 
 const safeTopic = (value: string) =>
@@ -278,8 +314,59 @@ export default function Home() {
   const [analyzePhoto, setAnalyzePhoto] = useState(false);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyStep, setBusyStep] = useState(0);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [recentIdeas, setRecentIdeas] = useState<string[]>([]);
   const resultRef = useRef<HTMLDivElement>(null);
+  const studioRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const savedDraft = window.localStorage.getItem("tiho-draft");
+        const savedIdeas = window.localStorage.getItem("tiho-recent-ideas");
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft) as Partial<Draft>;
+          if (formats.some((item) => item.id === draft.format)) setFormat(draft.format as Format);
+          if (["warm", "expert", "sales"].includes(draft.tone || "")) setTone(draft.tone as Tone);
+          if (["trust", "booking", "education"].includes(draft.goal || "")) setGoal(draft.goal as Goal);
+          if (["paper", "stickers", "overlay"].includes(draft.visualStyle || "")) setVisualStyle(draft.visualStyle as VisualStyle);
+          if (typeof draft.idea === "string" && draft.idea.trim()) {
+            setIdea(safeTopic(draft.idea));
+            setDraftRestored(true);
+          }
+        }
+        if (savedIdeas) {
+          const items = JSON.parse(savedIdeas);
+          if (Array.isArray(items)) {
+            setRecentIdeas(items.filter((item): item is string => typeof item === "string").slice(0, 4));
+          }
+        }
+      } catch {
+        window.localStorage.removeItem("tiho-draft");
+        window.localStorage.removeItem("tiho-recent-ideas");
+      } finally {
+        setHydrated(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const draft: Draft = { format, tone, goal, visualStyle, idea: safeTopic(idea) };
+    window.localStorage.setItem("tiho-draft", JSON.stringify(draft));
+  }, [format, tone, goal, visualStyle, idea, hydrated]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => {
+      setBusyStep((value) => Math.min(value + 1, busyMessages.length - 1));
+    }, 1800);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
@@ -301,6 +388,8 @@ export default function Home() {
     () => formats.find((item) => item.id === format)!,
     [format],
   );
+  const todayIndex = useMemo(() => (new Date().getDay() + 6) % 7, []);
+  const todayIdea = weeklyIdeas[todayIndex];
 
   const flash = (message: string) => {
     setNotice(message);
@@ -323,9 +412,38 @@ export default function Home() {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     setPhotoUrl(URL.createObjectURL(file));
     setPhotoName(file.name.slice(0, 80));
+    setAnalyzePhoto(false);
+  };
+
+  const removePhoto = () => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhotoUrl("");
+    setPhotoName("");
+    setAnalyzePhoto(false);
+    flash("Фото удалено из черновика");
+  };
+
+  const selectIdea = (item: typeof weeklyIdeas[number]) => {
+    setIdea(item.idea);
+    setFormat(item.format);
+    setTone(item.tone);
+    setGoal(item.goal);
+    setDraftRestored(false);
+    studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const rememberIdea = (value: string) => {
+    const topic = safeTopic(value);
+    if (!topic) return;
+    setRecentIdeas((current) => {
+      const next = [topic, ...current.filter((item) => item !== topic)].slice(0, 4);
+      window.localStorage.setItem("tiho-recent-ideas", JSON.stringify(next));
+      return next;
+    });
   };
 
   const generate = async () => {
+    setBusyStep(0);
     setBusy(true);
     try {
       const photo = analyzePhoto && photoUrl ? await photoForAnalysis(photoUrl) : null;
@@ -345,11 +463,12 @@ export default function Home() {
       setStoryPlan(data.plan);
       setGenerationMode(data.mode || "fallback");
       setResult({
-        title: "Цельная сторис",
+        title: formatAction[format].result,
         eyebrow: data.mode === "ai" ? "Создано ИИ-режиссёром" : "Демонстрационный режим",
         body: data.plan.caption,
         tags: "Проверьте факты и согласие клиента перед публикацией",
       });
+      rememberIdea(idea || todayIdea.idea);
     } catch {
       setStoryPlan(null);
       setGenerationMode("fallback");
@@ -380,6 +499,14 @@ export default function Home() {
     flash("Готовая картинка скачана");
   };
 
+  const startNew = () => {
+    setResult(null);
+    setStoryPlan(null);
+    setIdea("");
+    setDraftRestored(false);
+    studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <main>
       <header className="topbar">
@@ -395,6 +522,9 @@ export default function Home() {
           <p className="kicker">Контент-студия для массажиста</p>
           <h1>Пост готов.<br/><em>Можно выдохнуть.</em></h1>
           <p className="hero-text">Добавьте фото или мысль — получите готовую картинку для поста, сторис или обложки рилс без маркетолога и долгих раздумий.</p>
+          <button className="hero-cta" type="button" onClick={() => studioRef.current?.scrollIntoView({ behavior: "smooth" })}>
+            Создать бесплатно <span aria-hidden="true">→</span>
+          </button>
           <div className="hero-proof">
             <span>≈ 1 минута</span><span>Без регистрации</span><span>Бережные формулировки</span>
           </div>
@@ -409,7 +539,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="studio" aria-labelledby="studio-title">
+      <section className="studio" ref={studioRef} aria-labelledby="studio-title">
         <div className="studio-heading">
           <div>
             <p className="kicker">Создать публикацию</p>
@@ -417,6 +547,23 @@ export default function Home() {
           </div>
           <span className="step-count">4 простых шага</span>
         </div>
+
+        <div className="daily-prompt">
+          <span className="daily-icon" aria-hidden="true">✦</span>
+          <div>
+            <small>ИДЕЯ НА {todayIdea.day.toUpperCase()}</small>
+            <strong>{todayIdea.idea}</strong>
+          </div>
+          <button type="button" onClick={() => selectIdea(todayIdea)}>Взять эту идею</button>
+        </div>
+
+        {draftRestored && (
+          <div className="returning-note" role="status">
+            <span aria-hidden="true">↻</span>
+            <p><strong>Ваш прошлый черновик на месте.</strong> Можно продолжить с темы «{idea}».</p>
+            <button type="button" onClick={() => { setIdea(""); setDraftRestored(false); }}>Начать заново</button>
+          </div>
+        )}
 
         <div className="builder-grid">
           <div className="controls">
@@ -436,25 +583,28 @@ export default function Home() {
             <fieldset>
               <legend><span>2</span> Добавьте материал <small>необязательно</small></legend>
               <div className="material-grid">
-                <label className={`upload ${photoUrl ? "has-photo" : ""}`}>
-                  <input type="file" accept="image/png,image/jpeg,image/webp,image/heic" onChange={onPhoto} />
-                  {photoUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photoUrl} alt="Выбранное фото для публикации" />
-                      <span className="photo-badge">Заменить фото</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="upload-icon" aria-hidden="true">＋</span>
-                      <strong>Добавить фото</strong>
-                      <small>JPG, PNG, WEBP · до 10 МБ</small>
-                    </>
-                  )}
-                </label>
+                <div className="upload-wrap">
+                  <label className={`upload ${photoUrl ? "has-photo" : ""}`}>
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/heic" onChange={onPhoto} />
+                    {photoUrl ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={photoUrl} alt="Выбранное фото для публикации" />
+                        <span className="photo-badge">Заменить фото</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="upload-icon" aria-hidden="true">＋</span>
+                        <strong>Добавить фото</strong>
+                        <small>JPG, PNG, WEBP · до 10 МБ</small>
+                      </>
+                    )}
+                  </label>
+                  {photoUrl && <button className="remove-photo" type="button" onClick={removePhoto} aria-label="Удалить выбранное фото">×</button>}
+                </div>
                 <div className="idea-wrap">
                   <label htmlFor="idea">Или опишите идею</label>
-                  <textarea id="idea" value={idea} maxLength={240} onChange={(event) => setIdea(event.target.value)} placeholder="Например: почему после массажа хочется пить?" />
+                  <textarea id="idea" value={idea} maxLength={240} onChange={(event) => { setIdea(event.target.value); setDraftRestored(false); }} placeholder="Например: почему после массажа хочется пить?" />
                   <span className="char-count">{idea.length}/240</span>
                 </div>
               </div>
@@ -472,8 +622,16 @@ export default function Home() {
                 </div>
               )}
               <div className="quick-ideas" aria-label="Быстрые идеи">
-                {quickIdeas.map((item) => <button type="button" key={item} onClick={() => setIdea(item)}>+ {item}</button>)}
+                {quickIdeas.map((item) => <button type="button" key={item} onClick={() => { setIdea(item); setDraftRestored(false); }}>+ {item}</button>)}
               </div>
+              {recentIdeas.length > 0 && (
+                <div className="recent-ideas">
+                  <small>Недавние темы на этом устройстве</small>
+                  <div>
+                    {recentIdeas.map((item) => <button type="button" key={item} onClick={() => { setIdea(item); setDraftRestored(false); }}>↻ {item}</button>)}
+                  </div>
+                </div>
+              )}
               <div className="visual-picker">
                 <strong>Предпочтительный стиль — ИИ сможет изменить его под идею</strong>
                 <div className="visual-options">
@@ -516,9 +674,11 @@ export default function Home() {
             </div>
 
             <button className="generate-button" type="button" onClick={generate} disabled={busy}>
-              <span>{busy ? "ИИ продумывает сторис…" : "Создать сторис целиком"}</span>
+              <span>{busy ? busyMessages[busyStep] : formatAction[format].button}</span>
               <span aria-hidden="true">{busy ? "◌" : "→"}</span>
             </button>
+            {busy && <div className="generation-progress" role="status"><i style={{ width: `${(busyStep + 1) * 33.34}%` }} /><span>Обычно это занимает 5–15 секунд</span></div>}
+            {photoUrl && !analyzePhoto && <p className="photo-mode-note">Фото попадёт в готовый дизайн, но ИИ не будет его анализировать, пока вы не поставите галочку выше.</p>}
             <p className="safety-note">Тексты не содержат диагнозов и обещаний лечения. Перед публикацией проверьте факты и личные данные на фото.</p>
           </div>
 
@@ -539,7 +699,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="social-actions"><span>♡　◇　⌁</span><span>▢</span></div>
-              <p className="preview-caption"><strong>massage_marina</strong> {storyPlan?.headline || (result ? result.body.split("\n")[0] : "Новая сторис появится здесь после создания…")}</p>
+              <p className="preview-caption"><strong>massage_marina</strong> {storyPlan?.headline || (result ? result.body.split("\n")[0] : "Новая публикация появится здесь после создания…")}</p>
             </div>
             <p className="preview-hint">Так публикация будет выглядеть в ленте</p>
           </aside>
@@ -549,7 +709,7 @@ export default function Home() {
       {result && (
         <section className="result-section" ref={resultRef} aria-live="polite">
           <div className="result-head">
-            <div><p className="kicker">Готово к публикации</p><h2>Ваша картинка</h2></div>
+              <div><p className="kicker">Готово к публикации</p><h2>{formatAction[format].ready}</h2></div>
             <span className="ready-badge">● {generationMode === "ai" ? "Создано ИИ" : "Демо-режим"}</span>
           </div>
           <div className="creative-result">
@@ -564,11 +724,28 @@ export default function Home() {
                 <button type="button" className="download-button" onClick={downloadCard}>Скачать готовую картинку</button>
                 <button type="button" className="copy-button" onClick={copy}>Скопировать подпись</button>
                 <button type="button" className="again-button" onClick={generate}>Другой вариант</button>
+                <button type="button" className="new-button" onClick={startNew}>Новая публикация</button>
               </div>
             </div>
           </div>
         </section>
       )}
+
+      <section className="week-plan" aria-labelledby="week-title">
+        <div className="week-heading">
+          <div><p className="kicker">Причина вернуться завтра</p><h2 id="week-title">Идеи на всю неделю</h2></div>
+          <p>Открывайте сайт каждый день, берите готовую тему и публикуйте без мучительного «о чём написать?».</p>
+        </div>
+        <div className="week-grid">
+          {weeklyIdeas.map((item, index) => (
+            <button type="button" key={item.day} className={index === todayIndex ? "today" : ""} onClick={() => selectIdea(item)}>
+              <span>{item.short}</span>
+              <strong>{item.idea}</strong>
+              <small>{index === todayIndex ? "Сегодня · начать →" : `${formats.find((entry) => entry.id === item.format)?.title} →`}</small>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="how">
         <p className="kicker">Спокойный контент-процесс</p>
@@ -580,7 +757,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer><a className="brand" href="#top"><span className="brand-dot">т</span><span>тихо</span></a><p>Контент без суеты. Для мастеров, которые всё делают сами.</p><span>Фото обрабатываются только на вашем устройстве.</span></footer>
+      <footer><a className="brand" href="#top"><span className="brand-dot">т</span><span>тихо</span></a><p>Контент без суеты. Для мастеров, которые всё делают сами.</p><span>Фото отправляется ИИ только с вашего согласия и удаляется после обработки.</span></footer>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
   );

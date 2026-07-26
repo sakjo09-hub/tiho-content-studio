@@ -28,11 +28,15 @@ test("renders the complete Russian product page and social metadata", async () =
   assert.match(html, /<html lang="ru">/);
   assert.match(html, /Пост готов/);
   assert.match(html, /Создать публикацию/);
-  assert.match(html, /Создать сторис целиком/);
+  assert.match(html, /Создать бесплатно/);
+  assert.match(html, /Идеи на всю неделю/);
+  assert.match(html, /Взять эту идею/);
+  assert.match(html, /Создать пост с картинкой/);
   assert.match(html, /ИИ сможет изменить его под идею/);
   assert.match(html, /Белая плашка/);
   assert.match(html, /Стикеры/);
   assert.match(html, /Фото отправляются ИИ только с вашего согласия/);
+  assert.doesNotMatch(html, /Фото обрабатываются только на вашем устройстве/);
   assert.match(html, /https:\/\/tiho\.example\/og\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
 });
