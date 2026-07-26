@@ -32,7 +32,7 @@ test("renders the complete Russian product page and social metadata", async () =
   assert.match(html, /ИИ сможет изменить его под идею/);
   assert.match(html, /Белая плашка/);
   assert.match(html, /Стикеры/);
-  assert.match(html, /Фото остаются у вас/);
+  assert.match(html, /Фото отправляются ИИ только с вашего согласия/);
   assert.match(html, /https:\/\/tiho\.example\/og\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
 });

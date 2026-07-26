@@ -387,7 +387,7 @@ export default function Home() {
           <span className="brand-dot" aria-hidden="true">т</span>
           <span>тихо</span>
         </a>
-        <span className="privacy-pill"><span aria-hidden="true">●</span> Фото остаются у вас</span>
+        <span className="privacy-pill"><span aria-hidden="true">●</span> Фото отправляются ИИ только с вашего согласия</span>
       </header>
 
       <section className="hero" id="top">
