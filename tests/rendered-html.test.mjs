@@ -56,3 +56,47 @@ test("returns a safe holistic story plan when AI credentials are not configured"
   assert.equal(payload.plan.layout, "infographic");
   assert.match(payload.plan.headline, /Польза воды/);
 });
+
+test("uses the protected relay and returns an AI plan", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("relay-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const originalFetch = globalThis.fetch;
+  let relayRequest;
+  globalThis.fetch = async (input, init) => {
+    relayRequest = { input: String(input), init };
+    return Response.json({
+      content: JSON.stringify({
+        headline: "Время для себя",
+        body: "Мягкий массаж и спокойный час без спешки.",
+        caption: "Запись открыта.",
+        layout: "editorial",
+        palette: "sage",
+        photoRole: "hero",
+      }),
+    });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://tiho.example/api/generate-story", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://tiho.example" },
+        body: JSON.stringify({ format: "stories", goal: "booking", idea: "Свободное окно" }),
+      }),
+      {
+        ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+        GIGACHAT_CREDENTIALS: "test-secret-with-more-than-twenty-characters",
+        GIGACHAT_RELAY_URL: "https://relay.example",
+      },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.mode, "ai");
+    assert.equal(payload.plan.headline, "Время для себя");
+    assert.equal(relayRequest.input, "https://relay.example");
+    assert.equal(relayRequest.init.headers["X-Relay-Key"], "test-secret-with-more-than-twenty-characters");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

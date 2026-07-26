@@ -20,3 +20,19 @@ pnpm exec vinext dev
 pnpm exec vinext build
 node --test tests/rendered-html.test.mjs
 ```
+
+## ИИ через GigaChat
+
+В продакшене сайт обращается к GigaChat через функцию `backend/` в Yandex
+Cloud. Такой шлюз нужен из-за цепочки российских TLS-сертификатов: браузер
+пользователя не связывается с GigaChat напрямую, а ключ остаётся только в
+переменных окружения серверов.
+
+Переменные сайта:
+
+- `GIGACHAT_CREDENTIALS` — ключ авторизации GigaChat;
+- `GIGACHAT_SCOPE` — обычно `GIGACHAT_API_PERS`;
+- `GIGACHAT_RELAY_URL` — публичный URL функции Yandex Cloud.
+
+Функция принимает запросы только с правильным `X-Relay-Key`, ограничивает
+размер входных данных и не возвращает внутренние ошибки или секреты клиенту.

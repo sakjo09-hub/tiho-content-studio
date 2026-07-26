@@ -6,6 +6,7 @@ interface Env {
   ASSETS: Fetcher;
   GIGACHAT_CREDENTIALS?: string;
   GIGACHAT_SCOPE?: string;
+  GIGACHAT_RELAY_URL?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -128,6 +129,33 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
     return Response.json({ plan: fallback, mode: "demo" });
   }
 
+  const prompt = `Создай целостную концепцию ${input.format || "stories"} для частного массажиста.
+Тема: ${input.idea || "забота о себе"}. Тон: ${input.tone || "warm"}. Цель: ${input.goal || "booking"}.
+Определи композицию по фото, если оно приложено. Не ставь диагнозы, не обещай лечение, похудение, вывод токсинов или гарантированный результат.
+Стиль: живой русский язык, короткий сильный заголовок, максимум 2 коротких предложения на изображении, спокойная эстетика малого бизнеса.
+Верни ТОЛЬКО JSON:
+{"headline":"...","body":"...","caption":"...","layout":"editorial|stickers|infographic|before-after","palette":"sand|sage|charcoal|rose","photoRole":"background|hero|split|none"}`;
+
+  if (env.GIGACHAT_RELAY_URL) {
+    try {
+      const response = await fetch(env.GIGACHAT_RELAY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Relay-Key": env.GIGACHAT_CREDENTIALS,
+        },
+        body: JSON.stringify({ prompt, photo: input.photo }),
+      });
+      if (!response.ok) throw new Error(`GigaChat relay failed: ${response.status}`);
+      const data = await response.json() as { content?: string };
+      const raw = data.content?.replace(/^```json\s*|\s*```$/g, "") || "";
+      const plan = cleanPlan(JSON.parse(raw), fallback);
+      return Response.json({ plan, mode: "ai" });
+    } catch {
+      return Response.json({ plan: fallback, mode: "fallback" });
+    }
+  }
+
   let cleanupToken: string | null = null;
   let cleanupFileId: string | null = null;
   try {
@@ -135,12 +163,6 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
     cleanupToken = token;
     const fileId = input.photo?.dataUrl ? await uploadPhoto(token, input.photo) : null;
     cleanupFileId = fileId;
-    const prompt = `Создай целостную концепцию ${input.format || "stories"} для частного массажиста.
-Тема: ${input.idea || "забота о себе"}. Тон: ${input.tone || "warm"}. Цель: ${input.goal || "booking"}.
-Определи композицию по фото, если оно приложено. Не ставь диагнозы, не обещай лечение, похудение, вывод токсинов или гарантированный результат.
-Стиль: живой русский язык, короткий сильный заголовок, максимум 2 коротких предложения на изображении, спокойная эстетика малого бизнеса.
-Верни ТОЛЬКО JSON:
-{"headline":"...","body":"...","caption":"...","layout":"editorial|stickers|infographic|before-after","palette":"sand|sage|charcoal|rose","photoRole":"background|hero|split|none"}`;
     const response = await fetch("https://api.giga.chat/v1/chat/completions", {
       method: "POST",
       headers: {
