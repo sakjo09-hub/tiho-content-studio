@@ -16,12 +16,14 @@ interface Env {
   };
 }
 
+type PhotoInput = { dataUrl?: string; name?: string };
+
 type StoryRequest = {
-  format?: "post" | "stories" | "reel";
+  format?: "stories";
   tone?: "warm" | "expert" | "sales";
   goal?: "trust" | "booking" | "education";
   idea?: string;
-  photo?: { dataUrl?: string; name?: string };
+  photos?: PhotoInput[];
 };
 
 type StoryPlan = {
@@ -44,9 +46,9 @@ function demoPlan(input: StoryRequest): StoryPlan {
       ? "Коротко и понятно — без мифов и громких обещаний."
       : "Не за один день. Бережно, постепенно и с вниманием к вашему телу.",
     caption: `${topic}\n\nКаждый результат индивидуален. Перед процедурой мы обсуждаем самочувствие и выбираем комфортный формат работы.`,
-    layout: educational ? "infographic" : input.photo ? "editorial" : "stickers",
+    layout: educational ? "infographic" : input.photos?.length ? "editorial" : "stickers",
     palette: educational ? "charcoal" : "sand",
-    photoRole: input.photo ? "hero" : "none",
+    photoRole: input.photos?.length ? (input.photos.length > 1 ? "split" : "hero") : "none",
   };
 }
 
@@ -84,7 +86,7 @@ async function getGigaToken(env: Env) {
   return data.access_token;
 }
 
-async function uploadPhoto(token: string, photo: NonNullable<StoryRequest["photo"]>) {
+async function uploadPhoto(token: string, photo: PhotoInput) {
   const match = photo.dataUrl?.match(/^data:(image\/(?:png|jpeg));base64,(.+)$/);
   if (!match) return null;
   const bytes = Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0));
@@ -107,7 +109,7 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
   const origin = request.headers.get("Origin");
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
   if (origin && origin !== url.origin) return new Response("Forbidden", { status: 403 });
-  if (Number(request.headers.get("Content-Length") || 0) > 6 * 1024 * 1024) {
+  if (Number(request.headers.get("Content-Length") || 0) > 8 * 1024 * 1024) {
     return Response.json({ error: "Фотография слишком большая" }, { status: 413 });
   }
 
@@ -124,14 +126,16 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
     return Response.json({ error: "Некорректный запрос" }, { status: 400 });
   }
   input.idea = typeof input.idea === "string" ? input.idea.trim().slice(0, 240) : "";
+  input.format = "stories";
+  input.photos = Array.isArray(input.photos) ? input.photos.slice(0, 4) : [];
   const fallback = demoPlan(input);
   if (!env.GIGACHAT_CREDENTIALS) {
     return Response.json({ plan: fallback, mode: "demo" });
   }
 
-  const prompt = `Создай целостную концепцию ${input.format || "stories"} для частного массажиста.
+  const prompt = `Создай целостную концепцию сторис для частного массажиста.
 Тема: ${input.idea || "забота о себе"}. Тон: ${input.tone || "warm"}. Цель: ${input.goal || "booking"}.
-Определи композицию по фото, если оно приложено. Не ставь диагнозы, не обещай лечение, похудение, вывод токсинов или гарантированный результат.
+Приложено фото: ${input.photos.length}. Если фото есть, проанализируй их вместе и предложи единую композицию; для нескольких фото используй цельный коллаж или сравнение, а не отдельные несвязанные публикации. Не ставь диагнозы, не обещай лечение, похудение, вывод токсинов или гарантированный результат.
 Стиль: живой русский язык, короткий сильный заголовок, максимум 2 коротких предложения на изображении, спокойная эстетика малого бизнеса.
 Верни ТОЛЬКО JSON:
 {"headline":"...","body":"...","caption":"...","layout":"editorial|stickers|infographic|before-after","palette":"sand|sage|charcoal|rose","photoRole":"background|hero|split|none"}`;
@@ -144,7 +148,7 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
           "Content-Type": "application/json",
           "X-Relay-Key": env.GIGACHAT_CREDENTIALS,
         },
-        body: JSON.stringify({ prompt, photo: input.photo }),
+        body: JSON.stringify({ prompt, photos: input.photos }),
       });
       if (!response.ok) throw new Error(`GigaChat relay failed: ${response.status}`);
       const data = await response.json() as { content?: string };
@@ -157,12 +161,13 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
   }
 
   let cleanupToken: string | null = null;
-  let cleanupFileId: string | null = null;
+  let cleanupFileIds: string[] = [];
   try {
     const token = await getGigaToken(env);
     cleanupToken = token;
-    const fileId = input.photo?.dataUrl ? await uploadPhoto(token, input.photo) : null;
-    cleanupFileId = fileId;
+    const fileIds = (await Promise.all((input.photos || []).map((photo) => uploadPhoto(token, photo))))
+      .filter((fileId): fileId is string => Boolean(fileId));
+    cleanupFileIds = fileIds;
     const response = await fetch("https://api.giga.chat/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -172,7 +177,7 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
       },
       body: JSON.stringify({
         model: "GigaChat-2-Pro",
-        messages: [{ role: "user", content: prompt, ...(fileId ? { attachments: [fileId] } : {}) }],
+        messages: [{ role: "user", content: prompt, ...(fileIds.length ? { attachments: fileIds } : {}) }],
         stream: false,
         temperature: 0.7,
       }),
@@ -185,11 +190,11 @@ async function generateStory(request: Request, env: Env, ctx: ExecutionContext) 
   } catch {
     return Response.json({ plan: fallback, mode: "fallback" });
   } finally {
-    if (cleanupToken && cleanupFileId) {
-      ctx.waitUntil(fetch(`https://api.giga.chat/v1/files/${cleanupFileId}/delete`, {
+    if (cleanupToken && cleanupFileIds.length) {
+      ctx.waitUntil(Promise.all(cleanupFileIds.map((fileId) => fetch(`https://api.giga.chat/v1/files/${fileId}/delete`, {
         method: "POST",
         headers: { Authorization: `Bearer ${cleanupToken}` },
-      }).then(() => undefined).catch(() => undefined));
+      }).then(() => undefined).catch(() => undefined))));
     }
   }
 }

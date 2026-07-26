@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type Format = "post" | "stories" | "reel";
+type Format = "stories";
 type Tone = "warm" | "expert" | "sales";
 type Goal = "trust" | "booking" | "education";
 type VisualStyle = "paper" | "stickers" | "overlay";
@@ -15,18 +15,15 @@ type StoryPlan = {
   photoRole: "background" | "hero" | "split" | "none";
 };
 type Draft = {
-  format: Format;
   tone: Tone;
   goal: Goal;
   visualStyle: VisualStyle;
   idea: string;
 };
 
-const formats: { id: Format; icon: string; title: string; hint: string }[] = [
-  { id: "post", icon: "✦", title: "Пост", hint: "Квадрат 1080 × 1080" },
-  { id: "stories", icon: "◫", title: "Сторис", hint: "Вертикально 1080 × 1920" },
-  { id: "reel", icon: "▶", title: "Рилс", hint: "Обложка 1080 × 1920" },
-];
+const format: Format = "stories";
+const MAX_PHOTOS = 4;
+type SelectedPhoto = { id: string; url: string; name: string };
 
 const quickIdeas = [
   "Почему после массажа хочется пить?",
@@ -43,19 +40,17 @@ const weeklyIdeas: Array<{
   tone: Tone;
   goal: Goal;
 }> = [
-  { day: "Понедельник", short: "Пн", idea: "Знакомство со мной: почему я выбрала массаж", format: "post", tone: "warm", goal: "trust" },
+  { day: "Понедельник", short: "Пн", idea: "Знакомство со мной: почему я выбрала массаж", format: "stories", tone: "warm", goal: "trust" },
   { day: "Вторник", short: "Вт", idea: "Миф о массаже, в который пора перестать верить", format: "stories", tone: "expert", goal: "education" },
   { day: "Среда", short: "Ср", idea: "Свободные окна на этой неделе", format: "stories", tone: "warm", goal: "booking" },
-  { day: "Четверг", short: "Чт", idea: "Как проходит первый сеанс массажа", format: "post", tone: "expert", goal: "trust" },
-  { day: "Пятница", short: "Пт", idea: "Простая привычка для расслабленной шеи вечером", format: "reel", tone: "expert", goal: "education" },
+  { day: "Четверг", short: "Чт", idea: "Как проходит первый сеанс массажа", format: "stories", tone: "expert", goal: "trust" },
+  { day: "Пятница", short: "Пт", idea: "Простая привычка для расслабленной шеи вечером", format: "stories", tone: "expert", goal: "education" },
   { day: "Суббота", short: "Сб", idea: "Тихая атмосфера моего кабинета", format: "stories", tone: "warm", goal: "trust" },
-  { day: "Воскресенье", short: "Вс", idea: "Мягкое напоминание позаботиться о себе и записаться", format: "post", tone: "sales", goal: "booking" },
+  { day: "Воскресенье", short: "Вс", idea: "Мягкое напоминание позаботиться о себе и записаться", format: "stories", tone: "sales", goal: "booking" },
 ];
 
 const formatAction: Record<Format, { button: string; result: string; ready: string }> = {
-  post: { button: "Создать пост с картинкой", result: "Готовый пост", ready: "Пост готов" },
   stories: { button: "Создать сторис целиком", result: "Готовая сторис", ready: "Сторис готова" },
-  reel: { button: "Создать обложку и сценарий", result: "Обложка и сценарий", ready: "Рилс готов" },
 };
 
 const busyMessages = [
@@ -67,7 +62,7 @@ const busyMessages = [
 const safeTopic = (value: string) =>
   value.trim().replace(/\s+/g, " ").slice(0, 240);
 
-function buildContent(format: Format, tone: Tone, goal: Goal, idea: string) {
+function buildContent(_format: Format, tone: Tone, goal: Goal, idea: string) {
   const topic = safeTopic(idea) || "мягкое восстановление и забота о теле";
   const hooks = {
     warm: `Иногда телу нужно не «потерпеть ещё», а немного заботы.`,
@@ -80,27 +75,11 @@ function buildContent(format: Format, tone: Tone, goal: Goal, idea: string) {
     education: "Важно: ощущения и потребности у всех разные. Ориентируйтесь на самочувствие, а при жалобах консультируйтесь с врачом.",
   };
 
-  if (format === "post") {
-    return {
-      title: "Готовый пост",
-      eyebrow: "Можно публиковать",
-      body: `${hooks[tone]}\n\nСегодня говорим про ${topic.toLowerCase()}.\n\nМассаж — это время, когда можно замедлиться, прислушаться к ощущениям и отпустить накопившееся напряжение. Без обещаний «волшебного лечения» — только бережная работа, комфорт и внимание к вашему состоянию.\n\n${goalLine[goal]}\n\nСохраните пост, чтобы вернуться к нему позже 🤍`,
-      tags: "#массаж #заботаосебе #здороваяспина #отдых #массажист",
-    };
-  }
-  if (format === "stories") {
-    return {
-      title: "Готовая сторис",
-      eyebrow: "Картинка уже собрана",
-      body: `${hooks[tone]}\n\nТема: ${topic}\n\n${goalLine[goal]}`,
-      tags: "Можно скачать картинку и сразу опубликовать в сторис",
-    };
-  }
   return {
-    title: "Сценарий рилс",
-    eyebrow: "≈ 20 секунд",
-    body: `0–3 сек. — Крупный план / деталь кабинета\nТекст на экране: «${hooks[tone]}»\n\n3–10 сек. — 2–3 спокойные смены кадра\nЗакадрово: «Сегодня коротко про ${topic.toLowerCase()}. В работе я ориентируюсь на ваши ощущения и не использую универсальные обещания».\n\n10–16 сек. — Лайф-кадр или подготовка кабинета\nТекст: «Бережно. Индивидуально. В вашем темпе».\n\n16–20 сек. — Вы в кадре\nЗакадрово: «${goalLine[goal]}»`,
-    tags: "Музыка: спокойная, без резких переходов · 3–4 кадра",
+    title: "Готовая сторис",
+    eyebrow: "Картинка уже собрана",
+    body: `${hooks[tone]}\n\nТема: ${topic}\n\n${goalLine[goal]}`,
+    tags: "Можно скачать картинку и сразу опубликовать в сторис",
   };
 }
 
@@ -164,18 +143,35 @@ async function renderCreative(
   canvas: HTMLCanvasElement,
   format: Format,
   style: VisualStyle,
-  photoUrl: string,
+  photoUrls: string[],
   copy: string,
   plan?: StoryPlan | null,
 ) {
   const width = 1080;
-  const height = format === "post" ? 1080 : 1920;
+  const height = 1920;
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const paintBackground = (image?: HTMLImageElement) => {
+  const drawCover = (image: HTMLImageElement, x: number, y: number, cellWidth: number, cellHeight: number) => {
+    const scale = Math.max(cellWidth / image.width, cellHeight / image.height);
+    const sourceWidth = cellWidth / scale;
+    const sourceHeight = cellHeight / scale;
+    ctx.drawImage(
+      image,
+      (image.width - sourceWidth) / 2,
+      (image.height - sourceHeight) / 2,
+      sourceWidth,
+      sourceHeight,
+      x,
+      y,
+      cellWidth,
+      cellHeight,
+    );
+  };
+
+  const paintBackground = (images: HTMLImageElement[] = []) => {
     const palettes = {
       sand: ["#ead7c1", "#b58a70", "#684c42"],
       sage: ["#d7dfd8", "#617d6d", "#304b3f"],
@@ -189,11 +185,18 @@ async function renderCreative(
     gradient.addColorStop(1, colors[2]);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
-    if (image) {
-      const scale = Math.max(width / image.width, height / image.height);
-      const w = image.width * scale;
-      const h = image.height * scale;
-      ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+    if (images.length === 1) {
+      drawCover(images[0], 0, 0, width, height);
+    } else if (images.length === 2) {
+      drawCover(images[0], 0, 0, width / 2 - 3, height);
+      drawCover(images[1], width / 2 + 3, 0, width / 2 - 3, height);
+    } else if (images.length > 2) {
+      const visible = images.slice(0, 4);
+      visible.forEach((image, index) => {
+        const x = index % 2 === 0 ? 0 : width / 2 + 3;
+        const y = index < 2 ? 0 : height / 2 + 3;
+        drawCover(image, x, y, width / 2 - 3, height / 2 - 3);
+      });
     } else {
       ctx.fillStyle = "rgba(255,255,255,.11)";
       ctx.beginPath();
@@ -217,7 +220,7 @@ async function renderCreative(
     ctx.fillText("ТИХО • КОНТЕНТ-СТУДИЯ", 62, 72);
     ctx.letterSpacing = "0px";
 
-    const baseFont = format === "post" ? 58 : 66;
+    const baseFont = 66;
     ctx.font = `500 ${baseFont}px Arial`;
     const maxTextWidth = resolvedStyle === "overlay" ? width - 150 : width - 210;
     const lines = wrapCanvasText(ctx, copy, maxTextWidth);
@@ -226,7 +229,7 @@ async function renderCreative(
     if (resolvedStyle === "paper") {
       const contentLines = lines.filter((line, index) => line || (index > 0 && index < lines.length - 1));
       const boxHeight = contentLines.length * lineHeight + 112;
-      const boxY = format === "post" ? (height - boxHeight) / 2 : height * .57 - boxHeight / 2;
+      const boxY = height * .57 - boxHeight / 2;
       ctx.fillStyle = "rgba(255,255,255,.94)";
       ctx.fillRect(70, boxY, width - 140, boxHeight);
       ctx.fillStyle = "#17211d";
@@ -264,22 +267,17 @@ async function renderCreative(
     }
   };
 
-  if (!photoUrl) {
+  if (!photoUrls.length) {
     paintBackground();
     return;
   }
-  await new Promise<void>((resolve) => {
+  const images = await Promise.all(photoUrls.map((url) => new Promise<HTMLImageElement | null>((resolve) => {
     const image = new Image();
-    image.onload = () => {
-      paintBackground(image);
-      resolve();
-    };
-    image.onerror = () => {
-      paintBackground();
-      resolve();
-    };
-    image.src = photoUrl;
-  });
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  })));
+  paintBackground(images.filter((image): image is HTMLImageElement => Boolean(image)));
 }
 
 async function photoForAnalysis(photoUrl: string) {
@@ -290,24 +288,22 @@ async function photoForAnalysis(photoUrl: string) {
     item.onerror = reject;
     item.src = photoUrl;
   });
-  const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
+  const scale = Math.min(1, 960 / Math.max(image.width, image.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(image.width * scale);
   canvas.height = Math.round(image.height * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", .76);
+  return canvas.toDataURL("image/jpeg", .62);
 }
 
 export default function Home() {
-  const [format, setFormat] = useState<Format>("post");
   const [tone, setTone] = useState<Tone>("warm");
   const [goal, setGoal] = useState<Goal>("booking");
   const [visualStyle, setVisualStyle] = useState<VisualStyle>("paper");
   const [idea, setIdea] = useState("");
-  const [photoUrl, setPhotoUrl] = useState("");
-  const [photoName, setPhotoName] = useState("");
+  const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [result, setResult] = useState<ReturnType<typeof buildContent> | null>(null);
   const [storyPlan, setStoryPlan] = useState<StoryPlan | null>(null);
   const [generationMode, setGenerationMode] = useState<"ai" | "demo" | "fallback">("demo");
@@ -329,7 +325,6 @@ export default function Home() {
         const savedIdeas = window.localStorage.getItem("tiho-recent-ideas");
         if (savedDraft) {
           const draft = JSON.parse(savedDraft) as Partial<Draft>;
-          if (formats.some((item) => item.id === draft.format)) setFormat(draft.format as Format);
           if (["warm", "expert", "sales"].includes(draft.tone || "")) setTone(draft.tone as Tone);
           if (["trust", "booking", "education"].includes(draft.goal || "")) setGoal(draft.goal as Goal);
           if (["paper", "stickers", "overlay"].includes(draft.visualStyle || "")) setVisualStyle(draft.visualStyle as VisualStyle);
@@ -356,9 +351,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const draft: Draft = { format, tone, goal, visualStyle, idea: safeTopic(idea) };
+    const draft: Draft = { tone, goal, visualStyle, idea: safeTopic(idea) };
     window.localStorage.setItem("tiho-draft", JSON.stringify(draft));
-  }, [format, tone, goal, visualStyle, idea, hydrated]);
+  }, [tone, goal, visualStyle, idea, hydrated]);
 
   useEffect(() => {
     if (!busy) return;
@@ -368,26 +363,17 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [busy]);
 
-  useEffect(() => () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-  }, [photoUrl]);
-
   useEffect(() => {
     if (!result || !canvasRef.current) return;
     void renderCreative(
       canvasRef.current,
       format,
       visualStyle,
-      photoUrl,
+      photos.map((photo) => photo.url),
       storyPlan ? `${storyPlan.headline}\n\n${storyPlan.body}` : buildVisualCopy(tone, goal, idea),
       storyPlan,
     );
-  }, [result, format, visualStyle, photoUrl, tone, goal, idea, storyPlan]);
-
-  const selectedFormat = useMemo(
-    () => formats.find((item) => item.id === format)!,
-    [format],
-  );
+  }, [result, visualStyle, photos, tone, goal, idea, storyPlan]);
   const todayIndex = useMemo(() => (new Date().getDay() + 6) % 7, []);
   const todayIdea = weeklyIdeas[todayIndex];
 
@@ -397,35 +383,42 @@ export default function Home() {
   };
 
   const onPhoto = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      flash("Нужен файл изображения");
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const available = MAX_PHOTOS - photos.length;
+    const valid = files
+      .filter((file) => file.type.startsWith("image/") && file.size <= 10 * 1024 * 1024)
+      .slice(0, available);
+    if (!valid.length) {
+      flash(available <= 0 ? `Можно добавить до ${MAX_PHOTOS} фото` : "Нужны изображения до 10 МБ");
       event.target.value = "";
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      flash("Фото должно быть меньше 10 МБ");
-      event.target.value = "";
-      return;
-    }
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-    setPhotoUrl(URL.createObjectURL(file));
-    setPhotoName(file.name.slice(0, 80));
+    setPhotos((current) => [
+      ...current,
+      ...valid.map((file) => ({
+        id: crypto.randomUUID(),
+        url: URL.createObjectURL(file),
+        name: file.name.slice(0, 80),
+      })),
+    ]);
     setAnalyzePhoto(false);
+    if (valid.length < files.length) flash(`Добавлено ${valid.length}. Всего можно до ${MAX_PHOTOS} фото`);
+    event.target.value = "";
   };
 
-  const removePhoto = () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-    setPhotoUrl("");
-    setPhotoName("");
-    setAnalyzePhoto(false);
+  const removePhoto = (id: string) => {
+    setPhotos((current) => {
+      const target = current.find((photo) => photo.id === id);
+      if (target) URL.revokeObjectURL(target.url);
+      return current.filter((photo) => photo.id !== id);
+    });
+    if (photos.length === 1) setAnalyzePhoto(false);
     flash("Фото удалено из черновика");
   };
 
   const selectIdea = (item: typeof weeklyIdeas[number]) => {
     setIdea(item.idea);
-    setFormat(item.format);
     setTone(item.tone);
     setGoal(item.goal);
     setDraftRestored(false);
@@ -446,7 +439,12 @@ export default function Home() {
     setBusyStep(0);
     setBusy(true);
     try {
-      const photo = analyzePhoto && photoUrl ? await photoForAnalysis(photoUrl) : null;
+      const analyzedPhotos = analyzePhoto
+        ? (await Promise.all(photos.map(async (photo) => ({
+            dataUrl: await photoForAnalysis(photo.url),
+            name: photo.name || "story-photo.jpg",
+          })))).filter((photo): photo is { dataUrl: string; name: string } => Boolean(photo.dataUrl))
+        : [];
       const response = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -455,7 +453,7 @@ export default function Home() {
           tone,
           goal,
           idea,
-          ...(photo ? { photo: { dataUrl: photo, name: photoName || "story-photo.jpg" } } : {}),
+          ...(analyzedPhotos.length ? { photos: analyzedPhotos } : {}),
         }),
       });
       const data = await response.json() as { plan?: StoryPlan; mode?: "ai" | "demo" | "fallback"; error?: string };
@@ -493,7 +491,7 @@ export default function Home() {
   const downloadCard = () => {
     if (!result || !canvasRef.current) return;
     const link = document.createElement("a");
-    link.download = `tiho-${format}.png`;
+    link.download = "tiho-stories.png";
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
     flash("Готовая картинка скачана");
@@ -520,8 +518,8 @@ export default function Home() {
       <section className="hero" id="top">
         <div className="hero-copy">
           <p className="kicker">Контент-студия для массажиста</p>
-          <h1>Пост готов.<br/><em>Можно выдохнуть.</em></h1>
-          <p className="hero-text">Добавьте фото или мысль — получите готовую картинку для поста, сторис или обложки рилс без маркетолога и долгих раздумий.</p>
+          <h1>Сторис готова.<br/><em>Можно выдохнуть.</em></h1>
+          <p className="hero-text">Добавьте до четырёх фото или одну мысль — получите целостную сторис без маркетолога и долгих раздумий.</p>
           <button className="hero-cta" type="button" onClick={() => studioRef.current?.scrollIntoView({ behavior: "smooth" })}>
             Создать бесплатно <span aria-hidden="true">→</span>
           </button>
@@ -542,10 +540,10 @@ export default function Home() {
       <section className="studio" ref={studioRef} aria-labelledby="studio-title">
         <div className="studio-heading">
           <div>
-            <p className="kicker">Создать публикацию</p>
+            <p className="kicker">Создать сторис</p>
             <h2 id="studio-title">Что сделаем сегодня?</h2>
           </div>
-          <span className="step-count">4 простых шага</span>
+          <span className="step-count">3 простых шага</span>
         </div>
 
         <div className="daily-prompt">
@@ -568,39 +566,15 @@ export default function Home() {
         <div className="builder-grid">
           <div className="controls">
             <fieldset>
-              <legend><span>1</span> Выберите формат</legend>
-              <div className="format-grid">
-                {formats.map((item) => (
-                  <button key={item.id} type="button" className={`format-button ${format === item.id ? "active" : ""}`} onClick={() => setFormat(item.id)} aria-pressed={format === item.id}>
-                    <span className="format-icon" aria-hidden="true">{item.icon}</span>
-                    <strong>{item.title}</strong>
-                    <small>{item.hint}</small>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend><span>2</span> Добавьте материал <small>необязательно</small></legend>
+              <legend><span>1</span> Добавьте материал <small>необязательно · до 4 фото</small></legend>
               <div className="material-grid">
                 <div className="upload-wrap">
-                  <label className={`upload ${photoUrl ? "has-photo" : ""}`}>
-                    <input type="file" accept="image/png,image/jpeg,image/webp,image/heic" onChange={onPhoto} />
-                    {photoUrl ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={photoUrl} alt="Выбранное фото для публикации" />
-                        <span className="photo-badge">Заменить фото</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="upload-icon" aria-hidden="true">＋</span>
-                        <strong>Добавить фото</strong>
-                        <small>JPG, PNG, WEBP · до 10 МБ</small>
-                      </>
-                    )}
+                  <label className="upload">
+                    <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/heic" onChange={onPhoto} disabled={photos.length >= MAX_PHOTOS} />
+                    <span className="upload-icon" aria-hidden="true">＋</span>
+                    <strong>{photos.length ? "Добавить ещё фото" : "Добавить фото"}</strong>
+                    <small>{photos.length}/{MAX_PHOTOS} · JPG, PNG, WEBP · до 10 МБ каждое</small>
                   </label>
-                  {photoUrl && <button className="remove-photo" type="button" onClick={removePhoto} aria-label="Удалить выбранное фото">×</button>}
                 </div>
                 <div className="idea-wrap">
                   <label htmlFor="idea">Или опишите идею</label>
@@ -608,16 +582,28 @@ export default function Home() {
                   <span className="char-count">{idea.length}/240</span>
                 </div>
               </div>
-              {photoName && (
+              {photos.length > 0 && (
+                <div className="photo-list" aria-label={`Выбрано фото: ${photos.length}`}>
+                  {photos.map((photo, index) => (
+                    <div className="photo-item" key={photo.id}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt={`Выбранное фото ${index + 1}`} />
+                      <span>{index + 1}</span>
+                      <button type="button" onClick={() => removePhoto(photo.id)} aria-label={`Удалить фото ${index + 1}`}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {photos.length > 0 && (
                 <div className="photo-consent">
-                  <p className="file-note">Фото выбрано: {photoName}.</p>
+                  <p className="file-note">Выбрано фото: {photos.length}. ИИ соберёт их в одну композицию.</p>
                   <label>
                     <input
                       type="checkbox"
                       checked={analyzePhoto}
                       onChange={(event) => setAnalyzePhoto(event.target.checked)}
                     />
-                    <span><strong>Разрешить ИИ проанализировать фото</strong><small>Уменьшенная копия будет временно отправлена GigaChat и удалена после создания концепции.</small></span>
+                    <span><strong>Разрешить ИИ проанализировать фото</strong><small>Уменьшенные копии будут временно отправлены GigaChat и удалены после создания концепции.</small></span>
                   </label>
                 </div>
               )}
@@ -656,7 +642,7 @@ export default function Home() {
 
             <div className="options-row">
               <fieldset>
-                <legend><span>3</span> Тон</legend>
+                <legend><span>2</span> Тон</legend>
                 <div className="segmented">
                   {([["warm", "Тёплый"], ["expert", "Экспертный"], ["sales", "Продающий"]] as [Tone, string][]).map(([id, label]) =>
                     <button type="button" key={id} className={tone === id ? "active" : ""} onClick={() => setTone(id)}>{label}</button>
@@ -664,7 +650,7 @@ export default function Home() {
                 </div>
               </fieldset>
               <fieldset>
-                <legend><span>4</span> Цель</legend>
+                <legend><span>3</span> Цель</legend>
                 <select value={goal} onChange={(event) => setGoal(event.target.value as Goal)} aria-label="Цель публикации">
                   <option value="booking">Получить записи</option>
                   <option value="trust">Укрепить доверие</option>
@@ -678,7 +664,7 @@ export default function Home() {
               <span aria-hidden="true">{busy ? "◌" : "→"}</span>
             </button>
             {busy && <div className="generation-progress" role="status"><i style={{ width: `${(busyStep + 1) * 33.34}%` }} /><span>Обычно это занимает 5–15 секунд</span></div>}
-            {photoUrl && !analyzePhoto && <p className="photo-mode-note">Фото попадёт в готовый дизайн, но ИИ не будет его анализировать, пока вы не поставите галочку выше.</p>}
+            {photos.length > 0 && !analyzePhoto && <p className="photo-mode-note">Фото попадут в готовый дизайн, но ИИ не будет их анализировать, пока вы не поставите галочку выше.</p>}
             <p className="safety-note">Тексты не содержат диагнозов и обещаний лечения. Перед публикацией проверьте факты и личные данные на фото.</p>
           </div>
 
@@ -690,18 +676,18 @@ export default function Home() {
                 <span><strong>Массаж у Марины</strong><small>ваш город</small></span>
                 <b>•••</b>
               </div>
-              <div className={`preview-media ${photoUrl ? "with-photo" : ""}`}>
+              <div className={`preview-media ${photos.length ? "with-photo" : ""}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                {photoUrl && <img src={photoUrl} alt="" />}
+                {photos[0] && <img src={photos[0].url} alt="" />}
                 <div>
-                  <small>{selectedFormat.title.toUpperCase()}</small>
+                  <small>СТОРИС{photos.length > 1 ? ` · ${photos.length} ФОТО` : ""}</small>
                   <p>{safeTopic(idea) || "Время позаботиться о себе"}</p>
                 </div>
               </div>
               <div className="social-actions"><span>♡　◇　⌁</span><span>▢</span></div>
               <p className="preview-caption"><strong>massage_marina</strong> {storyPlan?.headline || (result ? result.body.split("\n")[0] : "Новая публикация появится здесь после создания…")}</p>
             </div>
-            <p className="preview-hint">Так публикация будет выглядеть в ленте</p>
+            <p className="preview-hint">Так сторис будет выглядеть в вертикальном формате</p>
           </aside>
         </div>
       </section>
@@ -713,8 +699,8 @@ export default function Home() {
             <span className="ready-badge">● {generationMode === "ai" ? "Создано ИИ" : "Демо-режим"}</span>
           </div>
           <div className="creative-result">
-            <div className={`canvas-frame ${format === "post" ? "square" : "vertical"}`}>
-              <canvas ref={canvasRef} aria-label={`Готовое изображение: ${selectedFormat.title}`} />
+            <div className="canvas-frame vertical">
+              <canvas ref={canvasRef} aria-label="Готовая сторис" />
             </div>
             <div className="result-card">
               <p className="result-label">Дополнительная подпись</p>
@@ -741,7 +727,7 @@ export default function Home() {
             <button type="button" key={item.day} className={index === todayIndex ? "today" : ""} onClick={() => selectIdea(item)}>
               <span>{item.short}</span>
               <strong>{item.idea}</strong>
-              <small>{index === todayIndex ? "Сегодня · начать →" : `${formats.find((entry) => entry.id === item.format)?.title} →`}</small>
+              <small>{index === todayIndex ? "Сегодня · начать →" : "Сторис →"}</small>
             </button>
           ))}
         </div>
@@ -757,7 +743,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer><a className="brand" href="#top"><span className="brand-dot">т</span><span>тихо</span></a><p>Контент без суеты. Для мастеров, которые всё делают сами.</p><span>Фото отправляется ИИ только с вашего согласия и удаляется после обработки.</span></footer>
+      <footer><a className="brand" href="#top"><span className="brand-dot">т</span><span>тихо</span></a><p>Сторис без суеты. Для мастеров, которые всё делают сами.</p><span>Фото отправляются ИИ только с вашего согласия и удаляются после обработки.</span></footer>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
   );

@@ -109,22 +109,26 @@ exports.handler = async (event) => {
     const raw = event.isBase64Encoded
       ? Buffer.from(event.body || "", "base64").toString("utf8")
       : event.body || "{}";
-    if (Buffer.byteLength(raw) > 6 * 1024 * 1024) return json(413, { error: "Payload too large" });
+    if (Buffer.byteLength(raw) > 8 * 1024 * 1024) return json(413, { error: "Payload too large" });
     input = JSON.parse(raw);
   } catch {
     return json(400, { error: "Invalid JSON" });
   }
 
   let accessToken;
-  let fileId;
+  let fileIds = [];
   try {
     accessToken = await token();
-    fileId = await uploadPhoto(accessToken, input.photo);
+    const photos = Array.isArray(input.photos) ? input.photos.slice(0, 4) : [];
+    for (const photo of photos) {
+      const fileId = await uploadPhoto(accessToken, photo);
+      if (fileId) fileIds.push(fileId);
+    }
     const prompt = String(input.prompt || "").slice(0, 5000);
     if (!prompt) return json(400, { error: "Prompt required" });
     const payload = JSON.stringify({
       model: "GigaChat-2-Pro",
-      messages: [{ role: "user", content: prompt, ...(fileId ? { attachments: [fileId] } : {}) }],
+      messages: [{ role: "user", content: prompt, ...(fileIds.length ? { attachments: fileIds } : {}) }],
       stream: false,
       temperature: 0.7,
     });
@@ -146,8 +150,10 @@ exports.handler = async (event) => {
     console.error("GigaChat relay error", String(error?.message || error));
     return json(502, { error: "AI service unavailable" });
   } finally {
-    if (accessToken && fileId) {
-      try { await removePhoto(accessToken, fileId); } catch {}
+    if (accessToken && fileIds.length) {
+      for (const fileId of fileIds) {
+        try { await removePhoto(accessToken, fileId); } catch {}
+      }
     }
   }
 };

@@ -88,6 +88,11 @@ legend small { margin-left: 7px; color: var(--muted); font-family: Inter, sans-s
 .upload img { width: 100%; height: 178px; object-fit: cover; }
 .photo-badge { position: absolute; right: 10px; bottom: 10px; padding: 7px 10px; border-radius: 99px; color: white; background: rgba(23,45,37,.82); font-size: 10px; font-weight: 700; }
 .remove-photo { position: absolute; z-index: 2; top: 9px; right: 9px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; color: white; background: rgba(23,45,37,.86); font-size: 20px; line-height: 1; cursor: pointer; }
+.photo-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin-top: 12px; }
+.photo-item { position: relative; min-width: 0; overflow: hidden; aspect-ratio: 1; border-radius: 14px; background: var(--sage); }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-item > span { position: absolute; left: 7px; bottom: 7px; width: 23px; height: 23px; display: grid; place-items: center; border-radius: 50%; color: white; background: rgba(23,45,37,.78); font-size: 9px; font-weight: 900; }
+.photo-item button { position: absolute; top: 6px; right: 6px; width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: white; background: rgba(23,45,37,.86); font-size: 17px; cursor: pointer; }
 .idea-wrap { position: relative; }
 .idea-wrap label { display: block; margin: 0 0 7px 3px; color: var(--muted); font-size: 11px; font-weight: 700; }
 textarea { width: 100%; min-height: 150px; resize: vertical; padding: 16px 18px 32px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: #faf8f3; line-height: 1.5; }
@@ -220,6 +225,7 @@ footer > span { color: rgba(255,255,255,.38); font-size: 9px; }
   .format-grid { grid-template-columns: 1fr; }
   .format-button { min-height: 84px; }
   .material-grid, .options-row { grid-template-columns: 1fr; }
+  .photo-list { grid-template-columns: repeat(4,minmax(76px,1fr)); overflow-x: auto; }
   .upload { min-height: 150px; }
   .quick-ideas { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 7px; }
   .quick-ideas button { white-space: nowrap; }
